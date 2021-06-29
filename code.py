@@ -1,13 +1,37 @@
-# SPDX-FileCopyrightText: 2019 ladyada for Adafruit Industries
-# SPDX-License-Identifier: MIT
+# https://learn.adafruit.com/making-a-pyportal-user-interface-displayio/display
+# https://circuitpython.readthedocs.io/en/latest/shared-bindings/displayio/#displayio.Display
+# https://circuitpython.readthedocs.io/projects/touchscreen/en/latest/api.html
+# https://www.devdungeon.com/content/pyportal-circuitpy-tutorial-adabox-011#toc-21
 
 import time
 import board
+import terminalio
 import busio
 from digitalio import DigitalInOut
-import adafruit_requests as requests
-import adafruit_esp32spi.adafruit_esp32spi_socket as socket
-from adafruit_esp32spi import adafruit_esp32spi
+from analogio import AnalogIn
+import adafruit_touchscreen
+import displayio
+from adafruit_display_text.label import Label
+from adafruit_bitmap_font import bitmap_font
+from adafruit_display_shapes.rect import Rect
+from adafruit_button import Button
+from adafruit_pyportal import PyPortal
+
+# ESP32 SPI
+from adafruit_esp32spi import adafruit_esp32spi, adafruit_esp32spi_wifimanager
+
+# Import NeoPixel Library
+import neopixel
+
+# Import Adafruit IO HTTP Client
+from adafruit_io.adafruit_io import IO_HTTP, AdafruitIO_RequestError
+
+
+# Import ADT7410 Library
+import adafruit_adt7410
+
+# Timeout between sending data to Adafruit IO, in seconds
+IO_DELAY = 30
 
 # Get wifi details and more from a secrets.py file
 try:
@@ -16,92 +40,303 @@ except ImportError:
     print("WiFi secrets are kept in secrets.py, please add them there!")
     raise
 
-print("ESP32 SPI webclient test")
-
-TEXT_URL = "http://wifitest.adafruit.com/testwifi/index.html"
-JSON_URL = "http://worldtimeapi.org/api/timezone/Europe/Helsinki.json"
-#JSON_URL = "http://api.coindesk.com/v1/bpi/currentprice/USD.json"
-
-
-# If you are using a board with pre-defined ESP32 Pins:
+# PyPortal ESP32 Setup
 esp32_cs = DigitalInOut(board.ESP_CS)
 esp32_ready = DigitalInOut(board.ESP_BUSY)
 esp32_reset = DigitalInOut(board.ESP_RESET)
-
-
-date_time_dict = {'Year': 0, 'Month': 0, 'Day': 0}
-now = {'Year': 0, 'Month': 0, 'Day': 0, 'Hour':0,'Minute': 0,'Second':0}
-
-# If you have an AirLift Shield:
-# esp32_cs = DigitalInOut(board.D10)
-# esp32_ready = DigitalInOut(board.D7)
-# esp32_reset = DigitalInOut(board.D5)
-
-# If you have an AirLift Featherwing or ItsyBitsy Airlift:
-# esp32_cs = DigitalInOut(board.D13)
-# esp32_ready = DigitalInOut(board.D11)
-# esp32_reset = DigitalInOut(board.D12)
-
-# If you have an externally connected ESP32:
-# NOTE: You may need to change the pins to reflect your wiring
-# esp32_cs = DigitalInOut(board.D9)
-# esp32_ready = DigitalInOut(board.D10)
-# esp32_reset = DigitalInOut(board.D5)
-
 spi = busio.SPI(board.SCK, board.MOSI, board.MISO)
 esp = adafruit_esp32spi.ESP_SPIcontrol(spi, esp32_cs, esp32_ready, esp32_reset)
+status_light = neopixel.NeoPixel(board.NEOPIXEL, 1, brightness=0.2)
+wifi = adafruit_esp32spi_wifimanager.ESPSPI_WiFiManager(esp, secrets, status_light)
 
-requests.set_socket(socket, esp)
+# Set your Adafruit IO Username and Key in secrets.py
+# (visit io.adafruit.com if you need to create an account,
+# or if you need your Adafruit IO key.)
+ADAFRUIT_IO_USER = secrets['aio_username']
+ADAFRUIT_IO_KEY = secrets['aio_key']
 
-if esp.status == adafruit_esp32spi.WL_IDLE_STATUS:
-    print("ESP32 found and in idle mode")
-print("Firmware vers.", esp.firmware_version)
-print("MAC addr:", [hex(i) for i in esp.MAC_address])
 
-for ap in esp.scan_networks():
-    print("\t%s\t\tRSSI: %d" % (str(ap["ssid"], "utf-8"), ap["rssi"]))
+# Create an instance of the Adafruit IO HTTP client
+io = IO_HTTP(ADAFRUIT_IO_USER, ADAFRUIT_IO_KEY, wifi)
 
-print("Connecting to AP...")
-while not esp.is_connected:
+# for i in range(128,168):
+#     print(i,' = ', chr(i))
+
+
+# Set up ADT7410 sensor
+i2c_bus = busio.I2C(board.SCL, board.SDA)
+adt = adafruit_adt7410.ADT7410(i2c_bus, address=0x48)
+adt.high_resolution = True
+
+# Set up an analog light sensor on the PyPortal
+adc = AnalogIn(board.LIGHT)
+display = board.DISPLAY
+
+# Backlight function
+# Value between 0 and 1 where 0 is OFF, 0.5 is 50% and 1 is 100% brightness.
+def set_backlight(val):
+    val = max(0, min(1.0, val))
+    display.auto_brightness = False
+    display.brightness = val
+
+
+# print(dir(board))
+display.rotation=0
+
+
+set_backlight(1.0)
+# Touchscreen setup
+# ------Rotate 270:
+screen_width = 240
+screen_height = 320
+ts = adafruit_touchscreen.Touchscreen(board.TOUCH_XL, board.TOUCH_XR,
+                                      board.TOUCH_YD, board.TOUCH_YU,
+                                      calibration=((5200, 59000), (5800, 57000)),
+                                      size=(screen_width, screen_height))
+
+
+try:
+    temperature_feed = io.get_feed('villaastrid.tupa-bme680-temp')
+except AdafruitIO_RequestError:
+    print("temperature_feed, failed")
+
+
+try:
+    ldr_feed = io.get_feed('home-tampere.esp32test-ldr')
+except AdafruitIO_RequestError:
+    print("ldr_feed, failed")
+
+
+try:
+    water_temp_feed = io.get_feed('villaastrid.water-temp')
+except AdafruitIO_RequestError:
+    print("water temp feed, failed")
+
+try:
+    outdoor_temp_feed = io.get_feed('villaastrid.outdoor1-temp')
+except AdafruitIO_RequestError:
+    print("outdoor temp feed, failed")
+
+
+
+# ------------- Display Groups ------------- #
+splash = displayio.Group(max_size=10) # The Main Display Group
+view1 = displayio.Group(max_size=15, x=0, y=40) # Group for View 1 objects
+view2 = displayio.Group(max_size=15, x=0, y=40) # Group for View 2 objects
+view3 = displayio.Group(max_size=15, x=0, y=40) # Group for View 3 objects
+
+# splash.append(view1)
+# splash.append(view2)
+# splash.append(view3)
+
+text = "hello hello"
+color = 0x0000FF
+font = terminalio.FONT
+color = 0x03AD31
+
+# Set the font and preload letters
+font = bitmap_font.load_font("/fonts/Junction-regular-24.bdf")
+# font = bitmap_font.load_font("/fonts/Arial-ItalicMT-17.bdf")
+# font = bitmap_font.load_font("/fonts/LeagueSpartan-Bold-16.bdf")
+font.load_glyphs(b'abcdefghjiklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890- ()')
+# Used to calculate vertical text height for Top Alignment
+text_hight = Label(font, text="M", color=0x03AD31, max_glyphs=10)
+
+# Create the text label
+text_area = Label(font, text=text, color=color, max_glyphs= 200)
+
+# Set the location
+text_area.x = 100
+text_area.y = 180
+
+# Show it
+cntr = 0
+while True:
+    # text = str(cntr)
+    cntr = cntr + 1
+
+    received_data = io.receive_data(temperature_feed["key"])
+    tupa_temp = float(received_data['value'])
+    text = "Tupa {0:.1f} C".format(tupa_temp)
+    text_area1 = Label(font, text=text, x=20, y=30,color=color, max_glyphs= 200)
+
+    received_data = io.receive_data(ldr_feed["key"])
+    ldr_value = float(received_data['value'])
+    text = "LDR {0:.0f}".format(ldr_value)
+    text_area2 = Label(font, text=text, x=20, y=70,color=color, max_glyphs= 200)
+
+    received_data = io.receive_data(water_temp_feed["key"])
+    water_temp_value = float(received_data['value'])
+    text = "Water {0:.1f}".format(water_temp_value)
+    text_area3 = Label(font, text=text, x=20, y=110,color=color, max_glyphs= 200)
+
+    received_data = io.receive_data(outdoor_temp_feed["key"])
+    outdoor_temp_value = float(received_data['value'])
+    text = "Outdoor {0:.1f} C".format(outdoor_temp_value)
+    text_area4 = Label(font, text=text, x=20, y=150,color=color, max_glyphs= 200)
+
+    splash.append(text_area1)
+    splash.append(text_area2)
+    splash.append(text_area3)
+    splash.append(text_area4)
+
+    # text_area.x = 100
+    # text_area.y = 80     # + (cntr *10)
+    display.show(splash)
+    time.sleep(10.0)
+    #text_area1 = Label(font, text="puppu", x=20, y=30,color=color, max_glyphs= 200)
+    #display.show(text_area1)
+    #time.sleep(10.0)
+
+    splash.remove(text_area1)
+    splash.remove(text_area2)
+    splash.remove(text_area3)
+    splash.remove(text_area4)
+
+
+while True:
+    pass
+
+# Default Label styling:
+TABS_X = 0
+TABS_Y = 0
+
+group = displayio.Group(max_size=4)
+group.x = 20
+group.y = 20
+set_backlight(1.0)
+
+display.show()
+
+while 1:
+    pass
+
+def show_values(name, value):
+    sensors_label = Label(font, text=name, color=0x03AD31, max_glyphs=200)
+    sensors_label.x = TABS_X
+    sensors_label.y = TABS_Y + 100
+    view2.append(sensors_label)
+
+    sensor_data = Label(font, text=value, color=0x03AD31, max_glyphs=100)
+    sensor_data.x = TABS_X
+    sensor_data.y = TABS_Y + 150
+    view3.append(sensor_data)
+    board.DISPLAY.show(group)
+
+set_backlight(1.0)
+
+
+
+while 1:
+    print("Retrieving data from temperature feed tupa-bme680-temp")
+    print(chr(176))
+    received_data = io.receive_data(temperature_feed["key"])
+    tupa_temp = float(received_data['value'])
+    v = "Tupa {0:.1f} C".format(tupa_temp)
+    print(v)
+    show_values(v,'xyz')
+    time.sleep(60.0)
+
+
+
+# Print out all the results.
+#for d in data:
+#    print('Data value: {0}'.format(d.value))
+
+
+
+
+
+# ------------- Layer Functions ------------- #
+# Hide a given Group by removing it from the main display Group.
+def hideLayer(i):
     try:
-        esp.connect_AP(secrets["ssid"], secrets["password"])
-    except RuntimeError as e:
-        print("could not connect to AP, retrying: ", e)
-        continue
-print("Connected to", str(esp.ssid, "utf-8"), "\tRSSI:", esp.rssi)
-print("My IP address is", esp.pretty_ip(esp.ip_address))
-print(
-    "IP lookup adafruit.com: %s" % esp.pretty_ip(esp.get_host_by_name("adafruit.com"))
-)
-print("Ping google.com: %d ms" % esp.ping("google.com"))
+        splash.remove(i)
+    except ValueError:
+        pass
+# Show a given Group by adding it to the main display Group.
+def showLayer(i):
+    try:
+        splash.append(i)
+    except ValueError:
+        pass
 
-# esp._debug = True
-print("Fetching text from", TEXT_URL)
-r = requests.get(TEXT_URL)
-print("-" * 40)
-print(r.text)
-print("-" * 40)
-r.close()
 
-print()
-print("Fetching json from", JSON_URL)
-r = requests.get(JSON_URL)
-print("-" * 40)
-json_resp = r.json()
-print(json_resp)
-print("-" * 40)
-datetime = json_resp['datetime']
-print(json_resp['datetime'])
-now['Year'] = int(datetime[0:4])
-now['Month'] = int(datetime[5:7])
-now['Day'] = int(datetime[8:10])
-now['Hour'] = int(datetime[11:13])
-now['Minute'] = int(datetime[14:16])
-now['Second'] = int(datetime[17:19])
+group = displayio.Group(max_size=4)
+group.x = 20
+group.y = 20
 
-print(now)
-# 2020-09-22T19:58:22.784283+03:00
-# json_resp['datetime']
-r.close()
+'''
+image_file = open("/images/ZerioAvatar_60x60.bmp", "rb")
+image = displayio.OnDiskBitmap(image_file)
+image_sprite = displayio.TileGrid(image, pixel_shader=displayio.ColorConverter())
 
-print("Done!")
+group.append(image_sprite)
+'''
+group.append(splash)
+board.DISPLAY.show(group)
+
+
+#icon_group = displayio.Group(max_size=1)
+#icon_group.x = 180
+#icon_group.y = 120
+#icon_group.scale = 1
+# view2.append(icon_group)
+
+# Set the font and preload letters
+font = bitmap_font.load_font("/fonts/Junction-regular-24.bdf")
+# font = bitmap_font.load_font("/fonts/Arial-ItalicMT-17.bdf")
+# font = bitmap_font.load_font("/fonts/LeagueSpartan-Bold-16.bdf")
+font.load_glyphs(b'abcdefghjiklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890- ()')
+# Used to calculate vertical text height for Top Alignment
+text_hight = Label(font, text="M", color=0x03AD31, max_glyphs=10)
+
+# Default Label styling:
+TABS_X = 0
+TABS_Y = 0
+
+# Text Label Objects
+feed1_label = Label(font, text="Text Window 1", color=0xE39300, max_glyphs=100)
+feed1_label.x = TABS_X
+feed1_label.y = TABS_Y + 10
+splash.append(feed1_label)
+
+feed2_label = Label(font, text="Text Window 2", color=0xFF80FF, max_glyphs=200)
+feed2_label.x = TABS_X
+feed2_label.y = TABS_Y + 50
+splash.append(feed2_label)
+
+sensors_label = Label(font, text="Data View 1", color=0x03AD31, max_glyphs=200)
+sensors_label.x = TABS_X
+sensors_label.y = TABS_Y + 100
+splash.append(sensors_label)
+
+sensor_data = Label(font, text="Data View 2", color=0x03AD31, max_glyphs=100)
+sensor_data.x = TABS_X
+sensor_data.y =  TABS_Y + 150
+view3.append(sensor_data)
+
+
+
+board.DISPLAY.show(group)
+
+while 1:
+    pass
+
+# return a string with word wrapping using PyPortal.wrap_nicely
+def text_box(target, top, max_chars, string):
+    text = pyportal.wrap_nicely(string, max_chars)
+    new_text = ""
+    test = ""
+    for w in text:
+        new_text += '\n'+w
+        test += 'M\n'
+    text_hight.text = test
+    glyph_box = text_hight.bounding_box
+    print(glyph_box[3])
+    target.text = "" # Odd things happen without this
+    target.y = round(glyph_box[3]/2)+top
+    target.text = new_text
+
+while True:
+    pass
