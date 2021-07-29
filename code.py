@@ -26,7 +26,7 @@ import neopixel
 # Import Adafruit IO HTTP Client
 from adafruit_io.adafruit_io import IO_HTTP, AdafruitIO_RequestError
 
-
+ 
 # Import ADT7410 Library
 import adafruit_adt7410
 
