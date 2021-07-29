@@ -11,7 +11,6 @@ from digitalio import DigitalInOut
 from analogio import AnalogIn
 import adafruit_touchscreen
 import displayio
-import rfm69_i2c
 from adafruit_display_text.label import Label
 from adafruit_bitmap_font import bitmap_font
 from adafruit_display_shapes.rect import Rect
@@ -27,7 +26,7 @@ import neopixel
 # Import Adafruit IO HTTP Client
 from adafruit_io.adafruit_io import IO_HTTP, AdafruitIO_RequestError
 
-
+ 
 # Import ADT7410 Library
 import adafruit_adt7410
 
@@ -65,65 +64,13 @@ io = IO_HTTP(ADAFRUIT_IO_USER, ADAFRUIT_IO_KEY, wifi)
 
 
 # Set up ADT7410 sensor
-i2c = busio.I2C(board.SCL, board.SDA)
-adt = adafruit_adt7410.ADT7410(i2c, address=0x48)
+i2c_bus = busio.I2C(board.SCL, board.SDA)
+adt = adafruit_adt7410.ADT7410(i2c_bus, address=0x48)
 adt.high_resolution = True
 
 # Set up an analog light sensor on the PyPortal
 adc = AnalogIn(board.LIGHT)
 display = board.DISPLAY
-
-# Internal constants:
-RFM69_I2C_ADDRESS    = const(0x20)
-I2C_BUF_LEN          = const(16)
-RFM69_RESET          = const(0x01)
-RFM69_CLR_RX         = const(0x02)
-RFM69_CLR_TX         = const(0x03)
-RFM69_SEND_MSG       = const(0x10)
-RFM69_TX_DATA        = const(0x11)
-RFM69_RX_AVAIL       = const(0x40)
-RFM69_RX_LOAD_MSG    = const(0x41)
-RFM69_RX_RD_MSG1     = const(0x42)
-RFM69_RX_RD_MSG2     = const(0x43)
-RFM69_RX_RD_LEN      = const(0x44)
-RFM69_TX_FREE        = const(0x50)
-
-MIN_UPLOAD_INTERVAL  = 60.0*5
-
-rfm69_out_buf    = [0]*2
-rfm69_inp_buf    = [0]*32
-
-aio_dict = {'Dock_T_Water': {'feed':'villaastrid.water-temp','available': False, 'timeto': 0.0, 'value':0.0},
-            'Dock_T_bmp180': {'feed':'villaastrid.dock-temp','available': False, 'timeto': 0.0, 'value':0.0},
-            'Dock_P_bmp180': {'feed':'villaastrid.dock-pres','available': False, 'timeto': 0.0, 'value':0.0},
-            'Dock_T_dht22': {'feed':'villaastrid.outdoor1-temp-dht22','available': False, 'timeto': 0.0, 'value':0.0},
-            'Dock_H_dht22': {'feed':'villaastrid.dock-hum-dht22','available': False, 'timeto': 0.0, 'value':0.0},
-            'OD_1_Temp':  {'feed':'villaastrid.outdoor1-temp','available': False, 'timeto': 0.0, 'value':0.0},
-            'OD_1_Hum':  {'feed':'villaastrid.outdoor1-hum-dht22','available': False, 'timeto': 0.0, 'value':0.0},
-            'OD_1_P_mb':  {'feed':'villaastrid.outdoor1-pmb','available': False, 'timeto': 0.0, 'value':0.0},
-            'OD_1_Light1':  {'feed':'villaastrid.outdoor1-ldr1','available': False, 'timeto': 0.0, 'value':0.0},
-            'OD_1_Temp2': {'feed':'villaastrid.outdoor1-temp-dht22','available': False, 'timeto': 0.0,  'value':0.0}}
-for key in aio_dict:
-    aio_dict[key]['timeto'] = time.monotonic() 
-
-while not i2c.try_lock():
-    pass
-
-try:
-    print("I2C addresses found:", [hex(device_address)
-        for device_address in i2c.scan()])
-    time.sleep(2)
-
-    # https://circuitpython.readthedocs.io/en/6.3.x/shared-bindings/busio/index.html#busio.I2C
-    #rfm69_out_buf[0] = RFM69_RX_AVAIL
-    #i2c.writeto_then_readfrom(RFM69_I2C_ADDRESS, rfm69_out_buf, rfm69_inp_buf)
-    #print(rfm69_out_buf)
-    #print(rfm69_inp_buf)
-
-finally:  # unlock the i2c bus when ctrl-c'ing out of the loop
-    i2c.unlock()
-
-
 
 # Backlight function
 # Value between 0 and 1 where 0 is OFF, 0.5 is 50% and 1 is 100% brightness.
@@ -131,7 +78,6 @@ def set_backlight(val):
     val = max(0, min(1.0, val))
     display.auto_brightness = False
     display.brightness = val
-
 
 
 # print(dir(board))
