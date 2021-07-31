@@ -65,9 +65,11 @@ io = IO_HTTP(ADAFRUIT_IO_USER, ADAFRUIT_IO_KEY, wifi)
 
 
 # Set up ADT7410 sensor
-i2c = busio.I2C(board.SCL, board.SDA)
+i2c = board.I2C()   #busio.I2C(board.SCL, board.SDA)
 adt = adafruit_adt7410.ADT7410(i2c, address=0x48)
 adt.high_resolution = True
+rfm69i2c = rfm69_i2c.RFM69_I2C(i2c)
+
 
 # Set up an analog light sensor on the PyPortal
 adc = AnalogIn(board.LIGHT)
@@ -119,6 +121,8 @@ try:
     #i2c.writeto_then_readfrom(RFM69_I2C_ADDRESS, rfm69_out_buf, rfm69_inp_buf)
     #print(rfm69_out_buf)
     #print(rfm69_inp_buf)
+
+    print('RFM69 available=',rfm69i2c.rfm69_data_avail())
 
 finally:  # unlock the i2c bus when ctrl-c'ing out of the loop
     i2c.unlock()

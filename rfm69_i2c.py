@@ -42,7 +42,7 @@ _RFM69_RX_RD_LEN      = const(0x44)
 _RFM69_TX_FREE        = const(0x50)
 
 # User-facing constants:
-
+ 
 class RFM69_I2C:
     # Class-level buffer to reduce memory usage and allocations.
     # Note this is NOT thread-safe or re-entrant by design.
@@ -51,6 +51,7 @@ class RFM69_I2C:
 
     def __init__(self, i2c, address=_RFM69_I2C_ADDRESS):
         self._device = i2c_device.I2CDevice(i2c, address)
+        print('RFM69_I2C:__init__')
         # Verify the chip ID.
         """if self._read_u8(_TSL2591_REGISTER_DEVICE_ID) != 0x50:
             raise RuntimeError("Failed to find TSL2591, check wiring!")
@@ -60,12 +61,17 @@ class RFM69_I2C:
         
     def _read_u8(self, address):
         # Read an 8-bit unsigned value from the specified 8-bit address.
-        with self._device as i2c:
+        print('_read_u8')
+        #with self._device as i2c:
             # Make sure to add command bit to read request.
-            self._BUFFER[0] = (address) & 0xFF
-            i2c.write_then_readinto(self._BUFFER, self._BUFFER, out_end=1, in_end=1)
+            # self._BUFFER[0] = (address) & 0xFF
+            # print('BUFFER', self._BUFFER)
+            # i2c.write_then_readinto(self._BUFFER, self._BUFFER, out_end=1, in_end=1)
+            # print('BUFFER', self._BUFFER)
+        print('in i2c')
         return self._BUFFER[0]
-
+        # return 69
+  
     # Disable invalid name check since pylint isn't smart enough to know LE
     # is an abbreviation for little-endian.
     # pylint: disable=invalid-name
@@ -89,33 +95,34 @@ class RFM69_I2C:
             i2c.write(self._BUFFER, end=2)
             
     def rfm69_data_avail(self):
-        rx_avail = 0
-        try:
-            rx_avail =self._read_u8(RFM69_RX_AVAIL)
-            # print('Rx Available = ',rx_avail)
-        except:
-        # print('Failed when bus.read_byte_data')
+        rx_avail = 99
+        print('rfm69_data_avail(self)')
+        rx_avail =self._read_u8(_RFM69_RX_AVAIL)
+        print('Rx Available = ',rx_avail)
+        print('Failed when bus.read_byte_data')
         return rx_avail
  
-      
+       
     def read_rfm69_msg(self,rd_buff):
         do_continue = False
         rd_len = 0
         if self.rfm69_data_avail(self) > 0:
             try:            
-                    rd_len = self._read_u8(RFM69_RX_LOAD_MSG)
-                    print('rd_len=',rd_len)
-                except:
-                    do_continue = False
-                    print('LOAD_MSG Error')
+                rd_len = self._read_u8(RFM69_RX_LOAD_MSG)
+                print('rd_len=',rd_len)
+            except:
+                do_continue = False
+                print('LOAD_MSG Error')
         else:
             do_continue = False
 
     
     def enable(self):
         """Put the device in a fully powered enabled mode."""
-        self._write_u8(0)
+        # self._write_u8(0,0)
+        pass
 
     def disable(self):
         """Disable the device and go into low power mode."""
-        self._write_u8(1)
+        # self._write_u8(1)
+        pass
