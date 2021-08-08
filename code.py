@@ -66,9 +66,9 @@ io = IO_HTTP(ADAFRUIT_IO_USER, ADAFRUIT_IO_KEY, wifi)
 
 # Set up ADT7410 sensor
 i2c = board.I2C()   #busio.I2C(board.SCL, board.SDA)
-adt = adafruit_adt7410.ADT7410(i2c, address=0x48)
-adt.high_resolution = True
-rfm69i2c = rfm69_i2c.RFM69_I2C(i2c)
+#adt = adafruit_adt7410.ADT7410(i2c, address=0x48)
+#adt.high_resolution = True
+rfm69i2c = rfm69_i2c.RFM69_I2C(i2c,address= 0x48)
 
 
 # Set up an analog light sensor on the PyPortal
@@ -106,7 +106,7 @@ aio_dict = {'Dock_T_Water': {'feed':'villaastrid.water-temp','available': False,
             'OD_1_Light1':  {'feed':'villaastrid.outdoor1-ldr1','available': False, 'timeto': 0.0, 'value':0.0},
             'OD_1_Temp2': {'feed':'villaastrid.outdoor1-temp-dht22','available': False, 'timeto': 0.0,  'value':0.0}}
 for key in aio_dict:
-    aio_dict[key]['timeto'] = time.monotonic() 
+    aio_dict[key]['timeto'] = time.monotonic()
 
 while not i2c.try_lock():
     pass
@@ -122,12 +122,14 @@ try:
     #print(rfm69_out_buf)
     #print(rfm69_inp_buf)
 
+    rfm69i2c.test_i2c_read()
     print('RFM69 available=',rfm69i2c.rfm69_data_avail())
 
 finally:  # unlock the i2c bus when ctrl-c'ing out of the loop
     i2c.unlock()
 
-
+while 1:
+    pass
 
 # Backlight function
 # Value between 0 and 1 where 0 is OFF, 0.5 is 50% and 1 is 100% brightness.
