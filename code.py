@@ -4,6 +4,7 @@
 # https://www.devdungeon.com/content/pyportal-circuitpy-tutorial-adabox-011#toc-21
 
 import time
+import json
 import board
 import terminalio
 import busio
@@ -17,7 +18,7 @@ from adafruit_bitmap_font import bitmap_font
 from adafruit_display_shapes.rect import Rect
 from adafruit_button import Button
 from adafruit_pyportal import PyPortal
-
+  
 # ESP32 SPI
 from adafruit_esp32spi import adafruit_esp32spi, adafruit_esp32spi_wifimanager
 
@@ -62,36 +63,45 @@ io = IO_HTTP(ADAFRUIT_IO_USER, ADAFRUIT_IO_KEY, wifi)
 
 # for i in range(128,168):
 #     print(i,' = ', chr(i))
-
-
+ 
+ 
 # Set up ADT7410 sensor
 i2c = board.I2C()   #busio.I2C(board.SCL, board.SDA)
 #adt = adafruit_adt7410.ADT7410(i2c, address=0x48)
 #adt.high_resolution = True
-rfm69i2c = rfm69_i2c.RFM69_I2C(i2c,address= 0x48)
+print('i2c initialized')
+rfm69i2c = rfm69_i2c.RFM69_I2C(i2c,address= 0x20)
 
-
+#while not i2c.try_lock():
+#    pass
+   
+try:
+    print('RFM69 available=',rfm69i2c.rfm69_data_avail)
+except:
+    print('RFM69 I2C problem')
+    
+while 1:
+    if rfm69i2c.rfm69_data_avail > 0:
+        msg_len = rfm69i2c.rfm69_load_msg()
+        print('Message length=',msg_len)
+        msg_1 = rfm69i2c.rfm69_get_data(1)
+        print(msg_1)
+        msg_2 = rfm69i2c.rfm69_get_data(2)
+        print(msg_2)
+        msg = msg_1 + msg_2
+        print(msg)
+        msg_str = msg.decode()
+        print(msg_str)
+        d = json.loads(msg_str)
+        print(d)
+    time.sleep(5.0)
+    
 # Set up an analog light sensor on the PyPortal
 adc = AnalogIn(board.LIGHT)
 display = board.DISPLAY
-
-# Internal constants:
-RFM69_I2C_ADDRESS    = const(0x20)
-I2C_BUF_LEN          = const(16)
-RFM69_RESET          = const(0x01)
-RFM69_CLR_RX         = const(0x02)
-RFM69_CLR_TX         = const(0x03)
-RFM69_SEND_MSG       = const(0x10)
-RFM69_TX_DATA        = const(0x11)
-RFM69_RX_AVAIL       = const(0x40)
-RFM69_RX_LOAD_MSG    = const(0x41)
-RFM69_RX_RD_MSG1     = const(0x42)
-RFM69_RX_RD_MSG2     = const(0x43)
-RFM69_RX_RD_LEN      = const(0x44)
-RFM69_TX_FREE        = const(0x50)
-
+  
 MIN_UPLOAD_INTERVAL  = 60.0*5
-
+    
 rfm69_out_buf    = [0]*2
 rfm69_inp_buf    = [0]*32
 
@@ -110,11 +120,11 @@ for key in aio_dict:
 
 while not i2c.try_lock():
     pass
-
 try:
-    print("I2C addresses found:", [hex(device_address)
-        for device_address in i2c.scan()])
-    time.sleep(2)
+    pass
+    #print("I2C addresses found:", [hex(device_address)
+    #    for device_address in i2c.scan()])
+    #time.sleep(2)
 
     # https://circuitpython.readthedocs.io/en/6.3.x/shared-bindings/busio/index.html#busio.I2C
     #rfm69_out_buf[0] = RFM69_RX_AVAIL
@@ -122,9 +132,10 @@ try:
     #print(rfm69_out_buf)
     #print(rfm69_inp_buf)
 
-    rfm69i2c.test_i2c_read()
-    print('RFM69 available=',rfm69i2c.rfm69_data_avail())
-
+    #print('RFM69 available=',rfm69i2c.rfm69_data_avail)
+except:
+    print('RFM69 I2C problem')
+    
 finally:  # unlock the i2c bus when ctrl-c'ing out of the loop
     i2c.unlock()
 
