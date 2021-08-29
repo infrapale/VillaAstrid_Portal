@@ -82,7 +82,10 @@ class RFM69_I2C:
  
     def reset(self):
         """Perform a software reset"""
-        self._write_register(_ADT7410_SWRST)
+        try:
+            self._write_register(_ADT7410_SWRST)
+        except:
+            pass
         time.sleep(0.5)
 
     def _read_register(self, addr, num=1):
@@ -110,19 +113,26 @@ class RFM69_I2C:
     @property
     def rfm69_data_avail(self):
         """Get number of available messages"""
-        return self._read_register(_RFM69_RX_AVAIL)[0]
+        try:
+            return self._read_register(_RFM69_RX_AVAIL)[0]
+        except:
+            return 0
     def rfm69_load_msg(self):
         """Get number of available messages"""
-        return self._read_register(_RFM69_RX_LOAD_MSG)[0]
+        try:
+            return self._read_register(_RFM69_RX_LOAD_MSG)[0]
+        except:
+            return 0
     
     def rfm69_get_data(self, sub_indx):
         """ Get part of the message """      
-        
-        if sub_indx == 1:
-            return self._read_register(_RFM69_RX_RD_MSG1,_RFM69_HALF_MSG_LEN )
-        else:   # if sub_indx = 2:
-            return self._read_register(_RFM69_RX_RD_MSG2,_RFM69_HALF_MSG_LEN )
-        
+        try:
+            if sub_indx == 1:
+                return self._read_register(_RFM69_RX_RD_MSG1,_RFM69_HALF_MSG_LEN )
+            else:   # if sub_indx = 2:
+                return self._read_register(_RFM69_RX_RD_MSG2,_RFM69_HALF_MSG_LEN )
+        except:
+            return 0
         
         
          

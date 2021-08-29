@@ -82,20 +82,26 @@ except:
     
 while 1:
     if rfm69i2c.rfm69_data_avail > 0:
-        msg_len = rfm69i2c.rfm69_load_msg()
-        print('Message length=',msg_len)
-        msg_1 = rfm69i2c.rfm69_get_data(1)
-        print(msg_1)
-        msg_2 = rfm69i2c.rfm69_get_data(2)
-        print(msg_2)
-        msg = msg_1 + msg_2
-        print(msg)
-        msg_str = msg.decode()
-        print(msg_str)
-        d = json.loads(msg_str)
-        print(d)
+        try:
+            msg_len = rfm69i2c.rfm69_load_msg()
+            print('Message length=',msg_len)
+            msg_1 = rfm69i2c.rfm69_get_data(1)
+            print(msg_1)
+            msg_2 = rfm69i2c.rfm69_get_data(2)
+            print(msg_2)
+            msg = msg_1 + msg_2
+            print(msg)
+            try:
+                msg_str = msg.decode()
+                print(msg_str)
+                d = json.loads(msg_str)
+                print(d)
+            except:
+                print('Decode error, no worries')
+        except:
+            print('RFM69 I2C Error')
     time.sleep(5.0)
-    
+     
 # Set up an analog light sensor on the PyPortal
 adc = AnalogIn(board.LIGHT)
 display = board.DISPLAY
